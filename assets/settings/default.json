@@ -487,6 +487,9 @@
     //
     // You need to rejoin a call for this setting to apply
     "experimental.legacy_audio_compatible": true,
+    // Custom paths for sound files. When a custom path is configured for a sound,
+    // it loads that file instead of the built-in asset.
+    "sounds": {}
   },
   // Scrollbar related settings
   "scrollbar": {

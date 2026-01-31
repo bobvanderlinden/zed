@@ -1326,6 +1326,7 @@ dependencies = [
  "rodio",
  "serde",
  "settings",
+ "shellexpand 2.1.2",
  "smol",
  "thiserror 2.0.17",
  "util",

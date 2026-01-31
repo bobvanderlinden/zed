@@ -3,6 +3,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gpui::App;
 use settings::{RegisterSetting, Settings, SettingsStore};
 
+#[derive(Clone, Debug, Default)]
+pub struct SoundSettings {
+    pub joined_call: Option<String>,
+    pub guest_joined_call: Option<String>,
+    pub leave_call: Option<String>,
+    pub mute: Option<String>,
+    pub unmute: Option<String>,
+    pub start_screenshare: Option<String>,
+    pub stop_screenshare: Option<String>,
+    pub agent_done: Option<String>,
+}
+
 #[derive(Clone, Debug, RegisterSetting)]
 pub struct AudioSettings {
     /// Opt into the new audio system.
@@ -38,18 +50,33 @@ pub struct AudioSettings {
     ///
     /// You need to rejoin a call for this setting to apply
     pub legacy_audio_compatible: bool,
+    /// Custom paths for sound files.
+    pub sounds: SoundSettings,
 }
 
 /// Configuration of audio in Zed
 impl Settings for AudioSettings {
     fn from_settings(content: &settings::SettingsContent) -> Self {
         let audio = &content.audio.as_ref().unwrap();
+        let sounds = audio.sounds.as_ref().map_or_else(SoundSettings::default, |s| {
+            SoundSettings {
+                joined_call: s.joined_call.clone(),
+                guest_joined_call: s.guest_joined_call.clone(),
+                leave_call: s.leave_call.clone(),
+                mute: s.mute.clone(),
+                unmute: s.unmute.clone(),
+                start_screenshare: s.start_screenshare.clone(),
+                stop_screenshare: s.stop_screenshare.clone(),
+                agent_done: s.agent_done.clone(),
+            }
+        });
         AudioSettings {
             rodio_audio: audio.rodio_audio.unwrap(),
             auto_microphone_volume: audio.auto_microphone_volume.unwrap(),
             auto_speaker_volume: audio.auto_speaker_volume.unwrap(),
             denoise: audio.denoise.unwrap(),
             legacy_audio_compatible: audio.legacy_audio_compatible.unwrap(),
+            sounds,
         }
     }
 }

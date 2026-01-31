@@ -360,6 +360,31 @@ pub struct AudioSettingsContent {
     /// You need to rejoin a call for this setting to apply
     #[serde(rename = "experimental.legacy_audio_compatible")]
     pub legacy_audio_compatible: Option<bool>,
+    /// Custom paths for sound files. When a custom path is configured for a sound,
+    /// it loads that file instead of the built-in asset.
+    pub sounds: Option<SoundSettingsContent>,
+}
+
+/// Custom paths for sound files.
+#[with_fallible_options]
+#[derive(Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug)]
+pub struct SoundSettingsContent {
+    /// Custom path for the sound played when joining a call.
+    pub joined_call: Option<String>,
+    /// Custom path for the sound played when a guest joins a call.
+    pub guest_joined_call: Option<String>,
+    /// Custom path for the sound played when leaving a call.
+    pub leave_call: Option<String>,
+    /// Custom path for the sound played when muting.
+    pub mute: Option<String>,
+    /// Custom path for the sound played when unmuting.
+    pub unmute: Option<String>,
+    /// Custom path for the sound played when starting screen share.
+    pub start_screenshare: Option<String>,
+    /// Custom path for the sound played when stopping screen share.
+    pub stop_screenshare: Option<String>,
+    /// Custom path for the sound played when an agent completes.
+    pub agent_done: Option<String>,
 }
 
 /// Control what info is collected by Zed.

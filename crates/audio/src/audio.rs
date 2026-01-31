@@ -1,7 +1,8 @@
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use collections::HashMap;
 use gpui::{App, BackgroundExecutor, BorrowAppContext, Global};
 use log::info;
+use std::path::Path;
 
 #[cfg(not(any(all(target_os = "windows", target_env = "gnu"), target_os = "freebsd")))]
 mod non_windows_and_freebsd_deps {
@@ -29,7 +30,7 @@ mod rodio_ext;
 pub use audio_settings::AudioSettings;
 pub use rodio_ext::RodioExt;
 
-use crate::audio_settings::LIVE_SETTINGS;
+use crate::audio_settings::{LIVE_SETTINGS, SoundSettings};
 
 // We are migrating to 16kHz sample rate from 48kHz. In the future
 // once we are reasonably sure most users have upgraded we will
@@ -76,6 +77,25 @@ impl Sound {
             Self::AgentDone => "agent_done",
         }
     }
+
+    fn custom_path<'a>(&self, sounds: &'a SoundSettings) -> Option<&'a String> {
+        match self {
+            Self::Joined => sounds.joined_call.as_ref(),
+            Self::GuestJoined => sounds.guest_joined_call.as_ref(),
+            Self::Leave => sounds.leave_call.as_ref(),
+            Self::Mute => sounds.mute.as_ref(),
+            Self::Unmute => sounds.unmute.as_ref(),
+            Self::StartScreenshare => sounds.start_screenshare.as_ref(),
+            Self::StopScreenshare => sounds.stop_screenshare.as_ref(),
+            Self::AgentDone => sounds.agent_done.as_ref(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum SoundSource {
+    Default(Sound),
+    Custom { sound: Sound, path: String },
 }
 
 pub struct Audio {
@@ -83,7 +103,7 @@ pub struct Audio {
     output_mixer: Option<Mixer>,
     #[cfg(not(any(all(target_os = "windows", target_env = "gnu"), target_os = "freebsd")))]
     pub echo_canceller: Arc<Mutex<apm::AudioProcessingModule>>,
-    source_cache: HashMap<Sound, Buffered<Decoder<Cursor<Vec<u8>>>>>,
+    source_cache: HashMap<SoundSource, Buffered<Decoder<Cursor<Vec<u8>>>>>,
     replays: replays::Replays,
 }
 
@@ -273,21 +293,48 @@ impl Audio {
     }
 
     fn sound_source(&mut self, sound: Sound, cx: &App) -> Result<impl Source + use<>> {
-        if let Some(wav) = self.source_cache.get(&sound) {
+        let settings = AudioSettings::get_global(cx);
+        let custom_path = sound.custom_path(&settings.sounds);
+
+        let cache_key = match custom_path {
+            Some(path) => SoundSource::Custom {
+                sound,
+                path: path.clone(),
+            },
+            None => SoundSource::Default(sound),
+        };
+
+        if let Some(wav) = self.source_cache.get(&cache_key) {
             return Ok(wav.clone());
         }
 
-        let path = format!("sounds/{}.wav", sound.file());
-        let bytes = cx
-            .asset_source()
-            .load(&path)?
-            .map(anyhow::Ok)
-            .with_context(|| format!("No asset available for path {path}"))??
-            .into_owned();
+        let bytes = match custom_path {
+            Some(path) => {
+                let expanded = shellexpand::full(path)
+                    .with_context(|| format!("Failed to expand path: {path}"))?;
+                let expanded_path = Path::new(expanded.as_ref());
+                if !expanded_path.is_absolute() {
+                    return Err(anyhow!(
+                        "Custom sound path must be absolute after expansion: {expanded}"
+                    ));
+                }
+                std::fs::read(expanded_path)
+                    .with_context(|| format!("Failed to read custom sound file: {expanded}"))?
+            }
+            None => {
+                let asset_path = format!("sounds/{}.wav", sound.file());
+                cx.asset_source()
+                    .load(&asset_path)?
+                    .map(anyhow::Ok)
+                    .with_context(|| format!("No asset available for path {asset_path}"))??
+                    .into_owned()
+            }
+        };
+
         let cursor = Cursor::new(bytes);
         let source = Decoder::new(cursor)?.buffered();
 
-        self.source_cache.insert(sound, source.clone());
+        self.source_cache.insert(cache_key, source.clone());
 
         Ok(source)
     }
